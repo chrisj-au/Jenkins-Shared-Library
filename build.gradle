@@ -28,4 +28,7 @@ sourceSets {
 
 test {
     useJUnitPlatform()
+    testLogging {
+        exceptionFormat = 'full'
+    }
 }
