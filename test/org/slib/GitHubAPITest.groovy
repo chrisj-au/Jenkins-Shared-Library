@@ -21,13 +21,18 @@ class GitHubAPITest {
         stepsMock = mock(Object.class)
         api = new GitHubAPI(stepsMock, 'https://api.github.com', 'fake-credentials-id')
 
-        // Mock withCredentials
+        // Mock withCredentials to simulate environment variable
         when(stepsMock.withCredentials(any())).thenAnswer(new Answer<Object>() {
             @Override
             Object answer(InvocationOnMock invocation) throws Throwable {
+                // Simulate retrieving credentials
                 def credentials = invocation.getArguments()[0]
-                def token = 'mocked-token'
-                System.setProperty('GITHUB_TOKEN', token)
+                if (credentials.credentialsId == 'fake-credentials-id') {
+                    System.setProperty('GITHUB_TOKEN', 'mocked-token')
+                }
+                // Execute the closure and return null
+                def closure = invocation.getArguments()[0].closure
+                closure.call()
                 return null
             }
         })
@@ -46,7 +51,7 @@ class GitHubAPITest {
 
     @AfterEach
     void tearDown() {
-        // Clean up the metaClass manipulation after each test
+        // Clean up the metaClass manipulation and system property after each test
         GroovySystem.metaClassRegistry.removeMetaClass(URL)
         System.clearProperty('GITHUB_TOKEN')
     }
