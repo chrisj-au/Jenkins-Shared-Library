@@ -1,5 +1,5 @@
 // test/org/example/GitHubAPITest.groovy
-package org.example
+package org.slib
 
 import groovy.json.JsonSlurper
 import org.junit.jupiter.api.Test
