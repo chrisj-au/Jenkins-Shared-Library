@@ -2,8 +2,9 @@
 Jenkins Shared Library
 
 
-GitHub API
+# GitHub API
 
+## Jenkins Pipeline
 ```
 // Jenkinsfile
 
@@ -35,3 +36,6 @@ pipeline {
     }
 }
 ```
+## Test
+
+`./gradlew test`
