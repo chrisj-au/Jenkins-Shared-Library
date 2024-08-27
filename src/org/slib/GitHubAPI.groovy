@@ -1,6 +1,6 @@
 // src/org/example/GitHubAPI.groovy
 
-package org.example
+package org.slib
 
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
