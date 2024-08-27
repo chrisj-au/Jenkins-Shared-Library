@@ -4,16 +4,18 @@ package org.example
 
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
+import java.net.HttpURLConnection
+import java.net.URL
 
 class GitHubAPI implements Serializable {
-    private String baseUrl
-    private String credentialsId
-    private def steps
+    private final String baseUrl
+    private final String token
+    private final def steps
 
-    GitHubAPI(def steps, String baseUrl = 'https://api.github.com', String credentialsId) {
+    GitHubAPI(def steps, String credentialsId, String baseUrl = 'https://api.github.com') {
         this.steps = steps
         this.baseUrl = baseUrl
-        this.credentialsId = credentialsId
+        this.token = fetchToken(credentialsId)
     }
 
     def getRepository(String owner, String repo) {
@@ -34,36 +36,51 @@ class GitHubAPI implements Serializable {
         return apiCall("GET", "/repos/${owner}/${repo}/branches")
     }
 
-    protected def apiCall(String method, String endpoint, def payload = null) {
-        def url = "${baseUrl}${endpoint}"
-        def token = getToken()
+    private def apiCall(String method, String endpoint, Map payload = null) {
+        HttpURLConnection connection = null
+        try {
+            def url = new URL("${baseUrl}${endpoint}")
+            connection = (HttpURLConnection) url.openConnection()
+            connection.setRequestMethod(method)
+            connection.setRequestProperty("Authorization", "token ${token}")
+            connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+            connection.setRequestProperty("User-Agent", "Jenkins-GitHubAPI-Client")
+            
+            if (payload) {
+                connection.setDoOutput(true)
+                connection.setRequestProperty("Content-Type", "application/json")
+                def outputStream = connection.getOutputStream()
+                outputStream.write(JsonOutput.toJson(payload).getBytes("UTF-8"))
+                outputStream.close()
+            }
 
-        def curlCommand = ["curl", "-s", "-X", method, "-H", "Authorization: token ${token}", "-H", "Accept: application/vnd.github.v3+json"]
+            int responseCode = connection.getResponseCode()
+            def responseStream = (responseCode >= 200 && responseCode < 300) ? connection.getInputStream() : connection.getErrorStream()
+            def responseText = responseStream.getText("UTF-8")
+            def jsonResponse = new JsonSlurper().parseText(responseText)
 
-        if (payload) {
-            def jsonPayload = JsonOutput.toJson(payload)
-            curlCommand += ["-H", "Content-Type: application/json", "-d", jsonPayload]
+            if (responseCode >= 200 && responseCode < 300) {
+                return jsonResponse
+            } else {
+                steps.error("GitHub API Error: ${jsonResponse.message ?: 'Unknown error'} (HTTP ${responseCode})")
+            }
+        } catch (Exception e) {
+            steps.error("Exception during GitHub API call: ${e.message}")
+        } finally {
+            if (connection != null) {
+                connection.disconnect()
+            }
         }
-
-        curlCommand += [url]
-
-        def response = executeCommand(curlCommand.join(' '))
-        def result = new JsonSlurper().parseText(response)
-
-        if (result.message && result.documentation_url) {
-            steps.error("GitHub API error: ${result.message}")
-        }
-
-        return result
     }
 
-    protected String getToken() {
-        return steps.withCredentials([steps.string(credentialsId: credentialsId, variable: 'GITHUB_TOKEN')]) {
-            return steps.env.GITHUB_TOKEN
+    private String fetchToken(String credentialsId) {
+        def token = null
+        steps.withCredentials([steps.string(credentialsId: credentialsId, variable: 'GITHUB_TOKEN')]) {
+            token = steps.env.GITHUB_TOKEN
         }
-    }
-
-    protected String executeCommand(String command) {
-        return steps.sh(script: command, returnStdout: true).trim()
+        if (!token) {
+            steps.error("Failed to retrieve GitHub token with credentialsId: ${credentialsId}")
+        }
+        return token
     }
 }
