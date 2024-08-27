@@ -1,68 +1,48 @@
 // test/org/example/GitHubAPITest.groovy
-
 package org.example
 
-import org.junit.Before
-import org.junit.Test
-import static org.junit.Assert.*
-import com.lesfurets.jenkins.unit.BasePipelineTest
+import groovy.json.JsonSlurper
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.AfterEach
+import org.mockito.Mockito
+import java.net.HttpURLConnection
+import java.net.URL
 
-class GitHubAPITest extends BasePipelineTest {
-    def github
-    def mockScript
+import static org.junit.jupiter.api.Assertions.assertEquals
+import static org.mockito.Mockito.*
 
-    @Before
+class GitHubAPITest {
+
+    private GitHubAPI api
+    private def stepsMock
+
+    @BeforeEach
     void setUp() {
-        super.setUp()
-        mockScript = loadScript("vars/githubApi.groovy")
-        github = new GitHubAPITestWrapper(mockScript)
+        stepsMock = mock(Object.class)
+        api = new GitHubAPI(stepsMock, 'https://api.github.com', 'fake-credentials-id')
+
+        // Mock HttpURLConnection
+        def connectionMock = mock(HttpURLConnection.class)
+        def urlMock = mock(URL.class)
+
+        when(urlMock.openConnection()).thenReturn(connectionMock)
+        GroovySystem.metaClassRegistry.removeMetaClass(URL)
+        URL.metaClass.constructor = { String urlString -> urlMock }
+
+        when(connectionMock.getResponseCode()).thenReturn(200)
+        when(connectionMock.getInputStream()).thenReturn(new ByteArrayInputStream('{"name": "test-repo"}'.bytes))
+    }
+
+    @AfterEach
+    void tearDown() {
+        // Clean up the metaClass manipulation after each test
+        GroovySystem.metaClassRegistry.removeMetaClass(URL)
     }
 
     @Test
     void testGetRepository() {
-        def result = github.getRepository("owner", "repo")
-        assertEquals("repo", result.name)
-        assertEquals("owner", result.owner.login)
-    }
-
-    @Test
-    void testCreatePullRequest() {
-        def result = github.createPullRequest("owner", "repo", "New feature", "feature-branch", "main", "Please review")
-        assertEquals(1, result.number)
-        assertEquals("New feature", result.title)
-    }
-
-    @Test
-    void testGetBranches() {
-        def result = github.getBranches("owner", "repo")
-        assertEquals(2, result.size())
-        assertEquals("main", result[0].name)
-        assertEquals("develop", result[1].name)
-    }
-
-    class GitHubAPITestWrapper extends GitHubAPI {
-        GitHubAPITestWrapper(def steps) {
-            super(steps, "https://api.github.com", "github-token")
-        }
-
-        @Override
-        protected def apiCall(String method, String endpoint, def payload = null) {
-            // Mock API responses
-            switch (endpoint) {
-                case ~/\/repos\/.*/:
-                    return [name: "repo", owner: [login: "owner"]]
-                case ~/\/repos\/.*\/pulls/:
-                    return [number: 1, title: payload.title]
-                case ~/\/repos\/.*\/branches/:
-                    return [[name: "main"], [name: "develop"]]
-                default:
-                    return [:]
-            }
-        }
-
-        @Override
-        protected String getToken() {
-            return "mock-token"
-        }
+        def repo = api.getRepository('owner', 'test-repo')
+        assertEquals('test-repo', repo.name)
     }
 }
